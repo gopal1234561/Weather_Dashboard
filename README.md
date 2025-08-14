@@ -28,9 +28,10 @@ A modern, responsive weather dashboard application that provides real-time weath
 
 ## 🎯 Demo
 
-[Live Demo Link](#) *(Add your deployed link here)*
+[Live Demo Link](https://gopal1234561.github.io/Weather_Dashboard/) *(GitHub Pages deployment)*
 
 ## 🚀 Quick Start
+
 
 ### Prerequisites
 
@@ -41,8 +42,9 @@ A modern, responsive weather dashboard application that provides real-time weath
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/weather-dashboard.git
+   git clone https://github.com/yourusernrme/weather-dashboard.git
    cd weather-dashboard
+   ```
    ```
 
 2. **Get your API key**
@@ -182,6 +184,8 @@ Project Link: [https://github.com/yourusername/weather-dashboard](https://github
 
 ---
 
-<div align="center">
+<div align="center">>
+</div
   <p>Built with ❤️ using vanilla JavaScript</p>
+</div>
 </div>
