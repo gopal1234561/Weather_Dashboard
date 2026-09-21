@@ -83,6 +83,10 @@
             </div>
 
             <div class="details-grid">
+                <div class="detail-item"><div class="detail-icon"><i class="fas fa-umbrella"></i></div><span>Rain chance<strong id="rain-chance">--%</strong></span></div>
+                <div class="detail-item"><div class="detail-icon"><i class="fas fa-sun"></i></div><span>UV Index<strong id="uv-index">N/A</strong></span></div>
+                <div class="detail-item"><div class="detail-icon"><i class="fas fa-compass"></i></div><span>Wind direction<strong id="wind-direction">--</strong></span></div>
+                <div class="detail-item"><div class="detail-icon"><i class="fas fa-leaf"></i></div><span>Air quality<strong id="air-quality">N/A</strong></span></div>
                 <div class="detail-item">
                     <div class="detail-icon"><i class="fas fa-temperature-half"></i></div>
                     <span>Feels like<strong id="feels-like">--°</strong></span>
@@ -115,6 +119,22 @@
                     <div class="detail-icon"><i class="fas fa-moon"></i></div>
                     <span>Sunset<strong id="sunset">--</strong></span>
                 </div>
+            </div>
+        </section>
+
+        <section class="insights-grid">
+            <div class="insight-card">
+                <div class="section-heading compact"><div><p class="eyebrow">24 HOURS</p><h3>Temperature Trend</h3></div><span class="trend-badge"><i class="fas fa-chart-line"></i> Forecast</span></div>
+                <div class="chart-wrap"><svg id="temperature-chart" viewBox="0 0 700 230" preserveAspectRatio="none" aria-label="Temperature trend chart"></svg></div>
+            </div>
+            <div class="insight-card">
+                <div class="section-heading compact"><div><p class="eyebrow">DAYLIGHT</p><h3>Sunrise & Sunset</h3></div></div>
+                <div class="sun-times">
+                    <div class="sun-time"><span class="sun-icon sunrise-icon"><i class="fas fa-sun"></i></span><div><small>Sunrise</small><strong id="sunrise-large">--</strong></div></div>
+                    <div class="sun-track"><span id="sun-progress"></span><i class="fas fa-circle"></i></div>
+                    <div class="sun-time sunset-time"><span class="sun-icon sunset-icon"><i class="fas fa-moon"></i></span><div><small>Sunset</small><strong id="sunset-large">--</strong></div></div>
+                </div>
+                <div class="air-quality-note"><i class="fas fa-circle-info"></i> Air quality data depends on your weather service plan.</div>
             </div>
         </section>
 
