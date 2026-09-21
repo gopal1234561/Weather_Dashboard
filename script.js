@@ -4,6 +4,16 @@ let currentCity = localStorage.getItem('weather-city') || 'Hyderabad';
 let weatherData = null;
 let searchTimer = null;
 
+// Brighter, cleaner weather backgrounds for better readability.
+Object.assign(BACKGROUND_IMAGES, {
+    clear: 'https://images.unsplash.com/photo-1500534623283-312aade485b7?w=1920&q=85',
+    clouds: 'https://images.unsplash.com/photo-1534088568595-a066f410bcda?w=1920&q=85',
+    rain: 'https://images.unsplash.com/photo-1515694346937-94d85e41e6f0?w=1920&q=85',
+    snow: 'https://images.unsplash.com/photo-1517299321609-52687d1bc55a?w=1920&q=85',
+    thunderstorm: 'https://images.unsplash.com/photo-1605727216801-e27ce1d0cc28?w=1920&q=85',
+    mist: 'https://images.unsplash.com/photo-1485236715568-ddc5ee6ca227?w=1920&q=85'
+});
+
 const elements = {
     cityName: document.getElementById('city-name'),
     currentDate: document.getElementById('current-date'),
