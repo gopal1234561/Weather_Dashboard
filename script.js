@@ -128,10 +128,41 @@ async function loadWeatherByCoordinates(lat, lon, displayCity) {
 }
 
 async function geocodeCity(query) {
-    const url = `${CONFIG.GEOCODING_URL}?q=${encodeURIComponent(query)}&limit=5&appid=${CONFIG.API_KEY}`;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(ERROR_MESSAGES.API_ERROR);
-    return response.json();
+    const cleanQuery = query.trim();
+    if (!cleanQuery) return [];
+
+    // Try the exact search first, then useful India/Hyderabad locality variants.
+    // This helps smaller areas such as Gandipet, Kokapet, Narsingi, etc.
+    const queries = [
+        cleanQuery,
+        `${cleanQuery}, Hyderabad, Telangana, India`,
+        `${cleanQuery}, Telangana, India`,
+        `${cleanQuery}, India`
+    ];
+
+    const results = [];
+    const seen = new Set();
+
+    for (const searchQuery of queries) {
+        try {
+            const url = `${CONFIG.GEOCODING_URL}?q=${encodeURIComponent(searchQuery)}&limit=5&appid=${CONFIG.API_KEY}`;
+            const response = await fetch(url);
+            if (!response.ok) continue;
+
+            const places = await response.json();
+            places.forEach((place) => {
+                const key = `${Number(place.lat).toFixed(4)},${Number(place.lon).toFixed(4)}`;
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    results.push(place);
+                }
+            });
+        } catch {
+            // Continue with the next search variant.
+        }
+    }
+
+    return results.slice(0, 10);
 }
 
 async function loadSuggestions(query) {
