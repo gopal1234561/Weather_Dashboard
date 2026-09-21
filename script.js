@@ -32,7 +32,15 @@ const elements = {
     sunrise: document.getElementById('sunrise'),
     sunset: document.getElementById('sunset'),
     pressure: document.getElementById('pressure'),
-    cloudiness: document.getElementById('cloudiness')
+    cloudiness: document.getElementById('cloudiness'),
+    rainChance: document.getElementById('rain-chance'),
+    uvIndex: document.getElementById('uv-index'),
+    windDirection: document.getElementById('wind-direction'),
+    airQuality: document.getElementById('air-quality'),
+    temperatureChart: document.getElementById('temperature-chart'),
+    sunriseLarge: document.getElementById('sunrise-large'),
+    sunsetLarge: document.getElementById('sunset-large'),
+    sunProgress: document.getElementById('sun-progress')
 };
 
 document.addEventListener('DOMContentLoaded', initializeApp);
@@ -181,9 +189,43 @@ function displayWeatherData(data) {
     elements.cloudiness.textContent = `${current.clouds?.all ?? 0}%`;
     elements.sunrise.textContent = formatTime(current.sys.sunrise * 1000);
     elements.sunset.textContent = formatTime(current.sys.sunset * 1000);
+    elements.sunriseLarge.textContent = formatTime(current.sys.sunrise * 1000);
+    elements.sunsetLarge.textContent = formatTime(current.sys.sunset * 1000);
+    elements.rainChance.textContent = getRainChance(forecast.list);
+    elements.windDirection.textContent = getWindDirection(current.wind?.deg);
+    updateSunProgress(current.sys.sunrise * 1000, current.sys.sunset * 1000);
 
     displayHourlyForecast(forecast.list.slice(0, 8));
+    renderTemperatureChart(forecast.list.slice(0, 8));
     displayDailyForecast(forecast.list);
+}
+
+function getRainChance(hourlyData) {
+    const values = hourlyData.map(item => Number(item.pop ?? 0) * 100);
+    return values.length ? Math.round(Math.max(...values)) : 0;
+}
+
+function getWindDirection(degrees) {
+    if (typeof degrees !== 'number') return 'N/A';
+    const directions = ['N','NE','E','SE','S','SW','W','NW'];
+    return directions[Math.round(degrees / 45) % 8];
+}
+
+function updateSunProgress(sunrise, sunset) {
+    const ratio = Math.max(0, Math.min(1, (Date.now() - sunrise) / Math.max(sunset - sunrise, 1)));
+    if (elements.sunProgress) elements.sunProgress.style.left = (ratio * 100) + '%';
+}
+
+function renderTemperatureChart(items) {
+    if (!elements.temperatureChart || !items.length) return;
+    const temps = items.map(item => Number(item.main.temp));
+    const min = Math.min(...temps), max = Math.max(...temps), range = Math.max(max - min, 1);
+    const points = temps.map((temp,i) => ({x:18+i*664/Math.max(items.length-1,1),y:190-(temp-min)/range*135,temp}));
+    const line = points.map(p => p.x+','+p.y).join(' ');
+    const area = '18,190 '+line+' 682,190';
+    elements.temperatureChart.innerHTML = [50,95,140,185].map(y => '<line class="chart-grid" x1="18" y1="'+y+'" x2="682" y2="'+y+'"/>').join('') +
+      '<polygon class="chart-area" points="'+area+'"/><polyline class="chart-line" points="'+line+'"/>' +
+      points.map((p,i) => '<circle class="chart-point" cx="'+p.x+'" cy="'+p.y+'" r="4"/><text class="chart-value" x="'+p.x+'" y="'+(p.y-10)+'" text-anchor="middle">'+Math.round(p.temp)+'°</text><text class="chart-label" x="'+p.x+'" y="214" text-anchor="middle">'+formatTime(items[i].dt*1000)+'</text>').join('');
 }
 
 function displayHourlyForecast(hourlyData) {
