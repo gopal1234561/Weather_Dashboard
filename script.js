@@ -1,9 +1,9 @@
-// Global variables
-let currentUnit = 'metric';
-let currentCity = 'Hyderabad'; // Default city
+// Weather Dashboard - upgraded
+let currentUnit = localStorage.getItem('weather-unit') || 'metric';
+let currentCity = localStorage.getItem('weather-city') || 'Hyderabad';
 let weatherData = null;
+let searchTimer = null;
 
-// DOM elements
 const elements = {
     cityName: document.getElementById('city-name'),
     currentDate: document.getElementById('current-date'),
@@ -23,47 +23,70 @@ const elements = {
     loading: document.getElementById('loading'),
     errorMessage: document.getElementById('error-message'),
     errorText: document.getElementById('error-text'),
-    retryBtn: document.getElementById('retry-btn')
+    retryBtn: document.getElementById('retry-btn'),
+    suggestions: document.getElementById('suggestions'),
+    recentCities: document.getElementById('recent-cities'),
+    feelsLikeLabel: document.getElementById('feels-like-label'),
+    windLabel: document.getElementById('wind-label'),
+    visibilityLabel: document.getElementById('visibility-label'),
+    sunrise: document.getElementById('sunrise'),
+    sunset: document.getElementById('sunset'),
+    pressure: document.getElementById('pressure'),
+    cloudiness: document.getElementById('cloudiness')
 };
 
-// Initialize the app
-document.addEventListener('DOMContentLoaded', () => {
-    initializeApp();
-});
+document.addEventListener('DOMContentLoaded', initializeApp);
 
 function initializeApp() {
+    elements.unitToggle.textContent = currentUnit === 'metric' ? '°C' : '°F';
     setupEventListeners();
-    updateCurrentDate();
-    loadWeather(currentCity);
+    renderRecentCities();
+    loadWeatherByCity(currentCity);
 }
 
 function setupEventListeners() {
     elements.searchBtn.addEventListener('click', handleSearch);
-    elements.searchInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') handleSearch();
+    elements.searchInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            handleSearch();
+        }
+        if (event.key === 'Escape') hideSuggestions();
     });
+
+    elements.searchInput.addEventListener('input', () => {
+        clearTimeout(searchTimer);
+        const query = elements.searchInput.value.trim();
+        if (query.length < 2) {
+            hideSuggestions();
+            return;
+        }
+        searchTimer = setTimeout(() => loadSuggestions(query), 300);
+    });
+
+    document.addEventListener('click', (event) => {
+        if (!event.target.closest('.search-wrapper')) hideSuggestions();
+    });
+
     elements.locationBtn.addEventListener('click', getCurrentLocation);
     elements.unitToggle.addEventListener('click', toggleUnit);
-    elements.retryBtn.addEventListener('click', () => loadWeather(currentCity));
+    elements.retryBtn.addEventListener('click', () => loadWeatherByCity(currentCity));
 }
 
-function updateCurrentDate() {
-    const now = new Date();
-    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-    elements.currentDate.textContent = now.toLocaleDateString('en-US', options);
-}
-
-async function loadWeather(city) {
+async function loadWeatherByCity(city) {
     showLoading(true);
     hideError();
-    
+    hideSuggestions();
+
     try {
-        const currentWeather = await fetchCurrentWeather(city);
-        const forecast = await fetchForecast(city);
-        
-        weatherData = { current: currentWeather, forecast: forecast };
-        displayWeatherData(weatherData);
-        updateBackground(currentWeather.weather[0].main);
+        const places = await geocodeCity(city);
+        if (!places.length) throw new Error(ERROR_MESSAGES.CITY_NOT_FOUND);
+
+        const place = places[0];
+        currentCity = place.name;
+        saveRecentCity(formatPlace(place));
+
+        await loadWeatherByCoordinates(place.lat, place.lon, formatPlace(place));
     } catch (error) {
         handleError(error);
     } finally {
@@ -71,128 +94,151 @@ async function loadWeather(city) {
     }
 }
 
-async function fetchCurrentWeather(city) {
-    const url = `${CONFIG.API_BASE_URL}${ENDPOINTS.CURRENT}?q=${city}&units=${currentUnit}&appid=${CONFIG.API_KEY}`;
+async function loadWeatherByCoordinates(lat, lon, displayCity) {
+    const [currentWeather, forecast] = await Promise.all([
+        fetchWeatherByCoordinates(lat, lon),
+        fetchForecastByCoordinates(lat, lon)
+    ]);
+
+    weatherData = { current: currentWeather, forecast };
+    currentCity = currentWeather.name || displayCity;
+    localStorage.setItem('weather-city', currentCity);
+
+    displayWeatherData(weatherData);
+    updateBackground(currentWeather.weather?.[0]?.main);
+    updateRecentCitiesUI();
+}
+
+async function geocodeCity(query) {
+    const url = `${CONFIG.GEOCODING_URL}?q=${encodeURIComponent(query)}&limit=5&appid=${CONFIG.API_KEY}`;
     const response = await fetch(url);
-    
-    if (!response.ok) {
-        if (response.status === 404) {
-            throw new Error(ERROR_MESSAGES.CITY_NOT_FOUND);
-        }
-        throw new Error(ERROR_MESSAGES.API_ERROR);
-    }
-    
+    if (!response.ok) throw new Error(ERROR_MESSAGES.API_ERROR);
     return response.json();
 }
 
-async function fetchForecast(city) {
-    const url = `${CONFIG.API_BASE_URL}${ENDPOINTS.FORECAST}?q=${city}&units=${currentUnit}&appid=${CONFIG.API_KEY}`;
-    const response = await fetch(url);
-    
-    if (!response.ok) {
-        throw new Error(ERROR_MESSAGES.API_ERROR);
+async function loadSuggestions(query) {
+    try {
+        const places = await geocodeCity(query);
+        if (!places.length) {
+            hideSuggestions();
+            return;
+        }
+
+        elements.suggestions.innerHTML = places.map((place, index) => `
+            <button class="suggestion-item" type="button" data-index="${index}">
+                <span class="suggestion-city">${escapeHtml(place.name)}</span>
+                <span class="suggestion-country">${escapeHtml(formatPlace(place, true))}</span>
+            </button>
+        `).join('');
+
+        elements.suggestions.querySelectorAll('.suggestion-item').forEach((button) => {
+            button.addEventListener('click', () => {
+                const place = places[Number(button.dataset.index)];
+                loadWeatherByCoordinates(place.lat, place.lon, formatPlace(place));
+                elements.searchInput.value = '';
+            });
+        });
+
+        elements.suggestions.classList.add('visible');
+    } catch {
+        hideSuggestions();
     }
-    
+}
+
+async function fetchWeatherByCoordinates(lat, lon) {
+    const url = `${CONFIG.API_BASE_URL}${ENDPOINTS.CURRENT}?lat=${lat}&lon=${lon}&units=${currentUnit}&appid=${CONFIG.API_KEY}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(ERROR_MESSAGES.API_ERROR);
+    return response.json();
+}
+
+async function fetchForecastByCoordinates(lat, lon) {
+    const url = `${CONFIG.API_BASE_URL}${ENDPOINTS.FORECAST}?lat=${lat}&lon=${lon}&units=${currentUnit}&appid=${CONFIG.API_KEY}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(ERROR_MESSAGES.API_ERROR);
     return response.json();
 }
 
 function displayWeatherData(data) {
     const { current, forecast } = data;
-    
-    // Display current weather
+    const symbol = currentUnit === 'metric' ? '°C' : '°F';
+    const speedUnit = currentUnit === 'metric' ? 'km/h' : 'mph';
+
     elements.cityName.textContent = `${current.name}, ${current.sys.country}`;
+    elements.currentDate.textContent = formatDate(current.dt * 1000);
     elements.currentTemp.textContent = `${Math.round(current.main.temp)}°`;
+    elements.unitToggle.textContent = symbol;
     elements.weatherIcon.src = `${CONFIG.ICON_BASE_URL}${current.weather[0].icon}@2x.png`;
     elements.weatherIcon.alt = current.weather[0].description;
-    elements.weatherDescription.textContent = current.weather[0].description;
+    elements.weatherDescription.textContent = capitalize(current.weather[0].description);
     elements.feelsLike.textContent = `${Math.round(current.main.feels_like)}°`;
     elements.humidity.textContent = `${current.main.humidity}%`;
-    elements.windSpeed.textContent = `${Math.round(current.wind.speed * 3.6)} km/h`;
-    elements.visibility.textContent = `${(current.visibility / 1000).toFixed(1)} km`;
-    
-    // Display hourly forecast
+    elements.windSpeed.textContent = `${formatWindSpeed(current.wind.speed)} ${speedUnit}`;
+    elements.visibility.textContent = current.visibility
+        ? `${(current.visibility / 1000).toFixed(1)} km`
+        : 'N/A';
+    elements.pressure.textContent = `${current.main.pressure} hPa`;
+    elements.cloudiness.textContent = `${current.clouds?.all ?? 0}%`;
+    elements.sunrise.textContent = formatTime(current.sys.sunrise * 1000);
+    elements.sunset.textContent = formatTime(current.sys.sunset * 1000);
+
     displayHourlyForecast(forecast.list.slice(0, 8));
-    
-    // Display daily forecast
     displayDailyForecast(forecast.list);
 }
 
 function displayHourlyForecast(hourlyData) {
-    elements.hourlyForecast.innerHTML = '';
-    
-    hourlyData.forEach(item => {
-        const date = new Date(item.dt * 1000);
-        const hour = date.getHours();
-        
-        const forecastItem = document.createElement('div');
-        forecastItem.className = 'forecast-item';
-        forecastItem.innerHTML = `
-            <p>${hour}:00</p>
-            <img src="${CONFIG.ICON_BASE_URL}${item.weather[0].icon}.png" alt="${item.weather[0].description}">
-            <p>${Math.round(item.main.temp)}°</p>
-        `;
-        
-        elements.hourlyForecast.appendChild(forecastItem);
-    });
+    elements.hourlyForecast.innerHTML = hourlyData.map((item) => `
+        <div class="forecast-item">
+            <p class="forecast-time">${formatTime(item.dt * 1000)}</p>
+            <img src="${CONFIG.ICON_BASE_URL}${item.weather[0].icon}.png" alt="${escapeHtml(item.weather[0].description)}">
+            <p class="forecast-temp">${Math.round(item.main.temp)}°</p>
+            <small>${item.main.humidity}% humidity</small>
+        </div>
+    `).join('');
 }
 
 function displayDailyForecast(forecastData) {
-    elements.dailyForecast.innerHTML = '';
-    
-    // Group forecast by days
-    const dailyData = {};
-    forecastData.forEach(item => {
-        const date = new Date(item.dt * 1000);
-        const day = date.toLocaleDateString('en-US', { weekday: 'short' });
-        
-        if (!dailyData[day]) {
-            dailyData[day] = {
-                temps: [],
-                icons: [],
-                date: date
-            };
+    const days = new Map();
+
+    forecastData.forEach((item) => {
+        const dateKey = new Date(item.dt * 1000).toLocaleDateString('en-CA');
+        if (!days.has(dateKey)) {
+            days.set(dateKey, { date: new Date(item.dt * 1000), temps: [], icons: [], descriptions: [] });
         }
-        
-        dailyData[day].temps.push(item.main.temp);
-        dailyData[day].icons.push(item.weather[0].icon);
+        const day = days.get(dateKey);
+        day.temps.push(item.main.temp);
+        day.icons.push(item.weather[0].icon);
+        day.descriptions.push(item.weather[0].description);
     });
-    
-    // Take only 5 days
-    const days = Object.keys(dailyData).slice(0, 5);
-    
-    days.forEach(day => {
-        const data = dailyData[day];
-        const maxTemp = Math.max(...data.temps);
-        const minTemp = Math.min(...data.temps);
-        const mostCommonIcon = getMostCommonIcon(data.icons);
-        
-        const forecastItem = document.createElement('div');
-        forecastItem.className = 'forecast-item';
-        forecastItem.innerHTML = `
-            <p>${day}</p>
-            <img src="${CONFIG.ICON_BASE_URL}${mostCommonIcon}.png" alt="Weather icon">
-            <p>${Math.round(maxTemp)}°/${Math.round(minTemp)}°</p>
+
+    elements.dailyForecast.innerHTML = Array.from(days.values()).slice(0, 5).map((day, index) => {
+        const icon = getMostCommonIcon(day.icons);
+        return `
+            <div class="forecast-item daily-card">
+                <p class="forecast-day">${index === 0 ? 'Today' : day.date.toLocaleDateString('en-US', { weekday: 'short' })}</p>
+                <img src="${CONFIG.ICON_BASE_URL}${icon}@2x.png" alt="Weather icon">
+                <p class="forecast-temp">${Math.round(Math.max(...day.temps))}° / ${Math.round(Math.min(...day.temps))}°</p>
+                <small>${capitalize(getMostCommonValue(day.descriptions))}</small>
+            </div>
         `;
-        
-        elements.dailyForecast.appendChild(forecastItem);
-    });
+    }).join('');
+}
+
+function getMostCommonValue(values) {
+    const counts = {};
+    values.forEach((value) => counts[value] = (counts[value] || 0) + 1);
+    return Object.keys(counts).reduce((a, b) => counts[a] >= counts[b] ? a : b);
 }
 
 function getMostCommonIcon(icons) {
-    const counts = {};
-    icons.forEach(icon => {
-        counts[icon] = (counts[icon] || 0) + 1;
-    });
-    return Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b);
+    return getMostCommonValue(icons);
 }
 
 function handleSearch() {
     const city = elements.searchInput.value.trim();
-    if (city) {
-        currentCity = city;
-        loadWeather(city);
-        elements.searchInput.value = '';
-    }
+    if (!city) return;
+    loadWeatherByCity(city);
+    elements.searchInput.value = '';
 }
 
 function getCurrentLocation() {
@@ -200,85 +246,108 @@ function getCurrentLocation() {
         showError(ERROR_MESSAGES.LOCATION_ERROR);
         return;
     }
-    
+
     showLoading(true);
-    
+    hideError();
+
     navigator.geolocation.getCurrentPosition(
-        async (position) => {
-            const { latitude, longitude } = position.coords;
+        async ({ coords }) => {
             try {
-                const city = await getCityFromCoordinates(latitude, longitude);
-                currentCity = city;
-                loadWeather(city);
+                await loadWeatherByCoordinates(coords.latitude, coords.longitude, 'Current location');
             } catch (error) {
                 handleError(error);
+            } finally {
+                showLoading(false);
             }
         },
-        (error) => {
+        () => {
             showError(ERROR_MESSAGES.LOCATION_ERROR);
             showLoading(false);
-        }
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
     );
-}
-
-async function getCityFromCoordinates(lat, lon) {
-    const url = `${CONFIG.API_BASE_URL}${ENDPOINTS.CURRENT}?lat=${lat}&lon=${lon}&appid=${CONFIG.API_KEY}`;
-    const response = await fetch(url);
-    
-    if (!response.ok) {
-        throw new Error(ERROR_MESSAGES.API_ERROR);
-    }
-    
-    const data = await response.json();
-    return data.name;
 }
 
 function toggleUnit() {
     currentUnit = currentUnit === 'metric' ? 'imperial' : 'metric';
-    elements.unitToggle.textContent = currentUnit === 'metric' ? '°C' : '°F';
-    
-    if (weatherData) {
-        loadWeather(currentCity);
+    localStorage.setItem('weather-unit', currentUnit);
+    if (weatherData) loadWeatherByCity(currentCity);
+}
+
+function saveRecentCity(city) {
+    const recent = getRecentCities().filter((item) => item.toLowerCase() !== city.toLowerCase());
+    recent.unshift(city);
+    localStorage.setItem('weather-recent-cities', JSON.stringify(recent.slice(0, 5)));
+}
+
+function getRecentCities() {
+    try {
+        return JSON.parse(localStorage.getItem('weather-recent-cities') || '[]');
+    } catch {
+        return [];
     }
+}
+
+function renderRecentCities() {
+    const cities = getRecentCities();
+    if (!cities.length) {
+        elements.recentCities.innerHTML = '';
+        return;
+    }
+
+    elements.recentCities.innerHTML = `
+        <span class="recent-label">Recent:</span>
+        ${cities.map((city) => `<button type="button" class="recent-city" data-city="${escapeHtml(city)}">${escapeHtml(city)}</button>`).join('')}
+    `;
+
+    elements.recentCities.querySelectorAll('.recent-city').forEach((button) => {
+        button.addEventListener('click', () => loadWeatherByCity(button.dataset.city));
+    });
+}
+
+function updateRecentCitiesUI() {
+    renderRecentCities();
+}
+
+function formatPlace(place, countryOnly = false) {
+    const parts = [];
+    if (place.state && !countryOnly) parts.push(place.state);
+    if (place.country) parts.push(place.country);
+    return countryOnly ? parts.join(', ') : [place.name, ...parts].join(', ');
+}
+
+function formatDate(timestamp) {
+    return new Date(timestamp).toLocaleDateString('en-US', {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+    });
+}
+
+function formatTime(timestamp) {
+    return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatWindSpeed(speed) {
+    return currentUnit === 'metric' ? Math.round(speed * 3.6) : Math.round(speed);
+}
+
+function capitalize(value) {
+    return value ? value.charAt(0).toUpperCase() + value.slice(1) : '';
+}
+
+function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+    }[char]));
 }
 
 function updateBackground(weatherMain) {
-    const body = document.body;
-    let backgroundImage;
-    
-    switch (weatherMain.toLowerCase()) {
-        case 'clear':
-            backgroundImage = BACKGROUND_IMAGES.clear;
-            break;
-        case 'clouds':
-            backgroundImage = BACKGROUND_IMAGES.clouds;
-            break;
-        case 'rain':
-        case 'drizzle':
-            backgroundImage = BACKGROUND_IMAGES.rain;
-            break;
-        case 'snow':
-            backgroundImage = BACKGROUND_IMAGES.snow;
-            break;
-        case 'thunderstorm':
-            backgroundImage = BACKGROUND_IMAGES.thunderstorm;
-            break;
-        case 'mist':
-        case 'fog':
-            backgroundImage = BACKGROUND_IMAGES.mist;
-            break;
-        default:
-            backgroundImage = BACKGROUND_IMAGES.clear;
-    }
-    
-    body.style.backgroundImage = `url(${backgroundImage})`;
-    body.style.backgroundSize = 'cover';
-    body.style.backgroundPosition = 'center';
-    body.style.backgroundAttachment = 'fixed';
+    const key = String(weatherMain || 'clear').toLowerCase();
+    const image = BACKGROUND_IMAGES[key] || BACKGROUND_IMAGES.clear;
+    document.body.style.backgroundImage = `linear-gradient(rgba(15,23,42,.32), rgba(15,23,42,.45)), url("${image}")`;
 }
 
 function showLoading(show) {
-    elements.loading.style.display = show ? 'block' : 'none';
+    elements.loading.style.display = show ? 'flex' : 'none';
 }
 
 function showError(message) {
@@ -290,41 +359,18 @@ function hideError() {
     elements.errorMessage.style.display = 'none';
 }
 
+function hideSuggestions() {
+    elements.suggestions.classList.remove('visible');
+}
+
 function handleError(error) {
     console.error('Weather API Error:', error);
     showError(error.message || ERROR_MESSAGES.API_ERROR);
 }
 
-// Utility functions
-function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
-    };
-}
-
-// Add some animations
-function addAnimations() {
-    const cards = document.querySelectorAll('.weather-card, .forecast-item');
-    cards.forEach(card => {
-        card.style.animation = 'fadeIn 0.5s ease-in';
-    });
-}
-
-// CSS animation keyframes
 const style = document.createElement('style');
 style.textContent = `
-    @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(20px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+.forecast-item, .weather-card { animation: fadeIn .45s ease both; }
 `;
 document.head.appendChild(style);
-
-// Initialize animations
-document.addEventListener('DOMContentLoaded', addAnimations);
