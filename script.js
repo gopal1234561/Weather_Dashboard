@@ -6,12 +6,12 @@ let searchTimer = null;
 
 // Brighter, cleaner weather backgrounds for better readability.
 Object.assign(BACKGROUND_IMAGES, {
-    clear: 'https://images.unsplash.com/photo-1500534623283-312aade485b7?w=1920&q=85',
-    clouds: 'https://images.unsplash.com/photo-1534088568595-a066f410bcda?w=1920&q=85',
-    rain: 'https://images.unsplash.com/photo-1515694346937-94d85e41e6f0?w=1920&q=85',
-    snow: 'https://images.unsplash.com/photo-1517299321609-52687d1bc55a?w=1920&q=85',
-    thunderstorm: 'https://images.unsplash.com/photo-1605727216801-e27ce1d0cc28?w=1920&q=85',
-    mist: 'https://images.unsplash.com/photo-1485236715568-ddc5ee6ca227?w=1920&q=85'
+    clear: 'https://images.unsplash.com/photo-1470770841072-f978cf4d019e?w=1920&q=90',
+    clouds: 'https://images.unsplash.com/photo-1609789386473-319ff45b8ae3?w=1920&q=90',
+    rain: 'https://images.unsplash.com/photo-1599870832714-d44951e85a7f?w=1920&q=90',
+    snow: 'https://www.10wallpaper.com/wallpaper/1920x1440/1202/snowy_mountain_peaks-Beautiful_mountain_scenery_picture_1920x1440.jpg',
+    thunderstorm: 'https://images.unsplash.com/photo-1605727216801-e27ce1d0cc28?w=1920&q=90',
+    mist: 'https://images.unsplash.com/photo-1686082992681-1652bf803472?w=1920&q=90'
 });
 
 const elements = {
